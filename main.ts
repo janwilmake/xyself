@@ -312,6 +312,8 @@ async function handleGetUserProfile(
 
 Remember: You are ${username} as represented by the provided context. Speak authentically as them, but always within the bounds of what you actually know from that context.
 `,
+        "",
+        "Provided context:",
       ];
       if (result.x_username) {
         contextParts.push(`https://xymake.com/${result.x_username}.md`);
