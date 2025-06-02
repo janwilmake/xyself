@@ -1,7 +1,6 @@
 // @ts-check
 /// <reference types="@cloudflare/workers-types" />
 /// <reference lib="esnext" />
-// Import the OAuth middleware (assuming it's available as a module or copied)
 import {
   handleOAuth,
   getCurrentUser,
@@ -13,7 +12,7 @@ import {
 export interface Env extends OAuthEnv {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
-  USER_DATA: KVNamespace; // Add your KV binding here
+  USER_DATA: KVNamespace;
 }
 
 interface UserData {
@@ -42,11 +41,48 @@ export default {
     // Handle OAuth routes first
     const oauthResponse = await handleOAuth(request, env, "user:email");
     if (oauthResponse) {
+      // If this is a successful callback, redirect to dashboard
+      if (path === "/callback" && oauthResponse.status === 302) {
+        const user = getCurrentUser(request);
+        if (user) {
+          const headers = new Headers(oauthResponse.headers);
+          headers.set("Location", "/dashboard");
+          return new Response(null, { status: 302, headers });
+        }
+      }
       return oauthResponse;
     }
 
-    // Root path - show usage
-    if (path === "/") {
+    // Dashboard route
+    if (path === "/dashboard") {
+      const user = getCurrentUser(request);
+      if (!user) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "/login?redirect_to=/dashboard" },
+        });
+      }
+
+      try {
+        const dashboardHtml = await env.USER_DATA.get("static:dashboard.html");
+        if (dashboardHtml) {
+          return new Response(dashboardHtml, {
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+        // Fallback to serve from assets if not in KV
+        return fetch(new Request(`${url.origin}/dashboard.html`));
+      } catch (error) {
+        return new Response("Dashboard temporarily unavailable", {
+          status: 500,
+        });
+      }
+    }
+
+    // Root path - show usage for API, homepage for browsers
+    if (path === "/auth") {
+      const acceptHeader = request.headers.get("Accept") || "";
+      // Return API documentation for non-HTML requests
       const user = getCurrentUser(request);
       const usage = {
         description: "GitHub to X Username Lookup API with OAuth",
@@ -59,12 +95,18 @@ export default {
         auth: {
           login: `${url.origin}/login`,
           logout: `${url.origin}/logout`,
+          dashboard: `${url.origin}/dashboard`,
         },
         usage: {
           get_profile: {
             endpoint: "GET /{username}",
             example: `${url.origin}/octocat`,
             description: "Get user profile (merges authorized and public data)",
+            content_types: {
+              "text/html": "Interactive chat interface",
+              "application/json": "Raw profile data",
+              "text/markdown": "AI context for LLMs",
+            },
           },
           set_authorized: {
             endpoint: "POST /{username}/set",
@@ -100,25 +142,23 @@ export default {
     // Parse username from path
     const pathMatch = path.match(/^\/([^\/]+)(?:\/(.+))?$/);
     if (!pathMatch) {
-      return new Response(JSON.stringify({ error: "Invalid path format" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        },
-      });
+      return new Response("Not Found", { status: 404 });
     }
 
     const [, username, action] = pathMatch;
 
-    if (!username) {
-      return new Response(JSON.stringify({ error: "Username is required" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
+    // Validate username format
+    if (!username || !/^[a-zA-Z0-9\-_]+$/.test(username)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid username format" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
         },
-      });
+      );
     }
 
     // Handle POST /{username}/set
@@ -131,13 +171,7 @@ export default {
       return handleGetUserProfile(request, env, username, corsHeaders);
     }
 
-    return new Response(JSON.stringify({ error: "Not found" }), {
-      status: 404,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    });
+    return new Response("Not Found", { status: 404 });
   },
 };
 
@@ -161,6 +195,46 @@ async function handleSetUserData(
       });
     }
 
+    // Validate input data
+    if (body.x_username && !/^[a-zA-Z0-9_]{1,15}$/.test(body.x_username)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid X username format" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        },
+      );
+    }
+
+    if (body.bio && body.bio.length > 500) {
+      return new Response(
+        JSON.stringify({ error: "Bio too long (max 500 characters)" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        },
+      );
+    }
+
+    if (body.context && body.context.length > 50000) {
+      return new Response(
+        JSON.stringify({ error: "Context too long (max 50,000 characters)" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        },
+      );
+    }
+
     // Check if user is authenticated and if they're setting their own data
     const currentUser = getCurrentUser(request);
     const isAuthorized = currentUser && currentUser.login === username;
@@ -169,11 +243,9 @@ async function handleSetUserData(
     let keyType: string;
 
     if (isAuthorized) {
-      // User is authenticated and setting their own data
       key = `authorized:${username}`;
       keyType = "authorized";
     } else {
-      // Public data (anyone can set)
       key = `public:${username}`;
       keyType = "public";
     }
@@ -220,6 +292,12 @@ async function handleGetUserProfile(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   try {
+    const acceptHeader = request.headers.get("Accept") || "";
+    const isHtmlRequest = acceptHeader.includes("text/html");
+    const isMarkdownRequest =
+      acceptHeader.includes("text/markdown") ||
+      acceptHeader.includes("text/plain");
+
     // Fetch from GitHub API first (fallback data)
     let githubData: any = null;
     let githubError: string | null = null;
@@ -229,7 +307,7 @@ async function handleGetUserProfile(
         `https://api.github.com/users/${username}`,
         {
           headers: {
-            "User-Agent": "Cloudflare-Worker",
+            "User-Agent": "XYSelf-Bot/1.0",
           },
         },
       );
@@ -313,12 +391,16 @@ async function handleGetUserProfile(
 Remember: You are ${username} as represented by the provided context. Speak authentically as them, but always within the bounds of what you actually know from that context.
 `,
         "",
-        "Provided context:",
+        "## Context Sources:",
       ];
       if (result.x_username) {
-        contextParts.push(`https://xymake.com/${result.x_username}.md`);
+        contextParts.push(
+          `- X Posts: https://xymake.com/${result.x_username}.md`,
+        );
       }
-      contextParts.push(`https://flaredream.com/${githubData.login}`);
+      contextParts.push(
+        `- GitHub Profile: https://flaredream.com/${githubData.login}`,
+      );
       result.context = contextParts.join("\n");
     }
 
@@ -349,12 +431,33 @@ Remember: You are ${username} as represented by the provided context. Speak auth
       github_error: githubError,
     };
 
-    return new Response(JSON.stringify(result, null, 2), {
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    });
+    // Return appropriate format based on Accept header
+    if (isHtmlRequest) {
+      // Return interactive chat interface
+      const chatHtml = generateChatInterface(result);
+      return new Response(chatHtml, {
+        headers: {
+          "Content-Type": "text/html",
+          ...corsHeaders,
+        },
+      });
+    } else if (isMarkdownRequest) {
+      // Return just the context for AI consumption
+      return new Response(result.context || "No context available", {
+        headers: {
+          "Content-Type": "text/markdown",
+          ...corsHeaders,
+        },
+      });
+    } else {
+      // Return JSON data
+      return new Response(JSON.stringify(result, null, 2), {
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        },
+      });
+    }
   } catch (error) {
     console.error("Error fetching user profile:", error);
 
@@ -372,4 +475,117 @@ Remember: You are ${username} as represented by the provided context. Speak auth
       },
     );
   }
+}
+
+function generateChatInterface(profile: any): string {
+  const hasContext = profile.context && profile.context.trim();
+  const displayName = profile.github_username || "Unknown User";
+  const bio = profile.bio || "No bio available";
+
+  return `<!DOCTYPE html>
+<html lang="en" class="bg-black">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with ${displayName} - XYSelf</title>
+    <meta name="description" content="Chat with an AI version of ${displayName} powered by their social media content and context." />
+    <meta name="robots" content="index, follow" />
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="Chat with ${displayName}" />
+    <meta property="og:description" content="Chat with an AI version of ${displayName} powered by their social media content and context." />
+    <meta property="og:image" content="${
+      profile.profile_picture || "https://via.placeholder.com/400x400"
+    }" />
+    <meta property="og:url" content="https://xyself.com/${
+      profile.github_username
+    }" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+        body { font-family: "Inter", sans-serif; }
+        .xy-gradient { background: linear-gradient(135deg, #000000 0%, #121212 100%); }
+        .xy-border { border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="text-white">
+    <main class="min-h-screen xy-gradient">
+        <div class="max-w-4xl mx-auto px-4 py-8">
+            <!-- Header -->
+            <div class="xy-border rounded-xl p-6 bg-white/5 mb-8">
+                <div class="flex items-center gap-4 mb-4">
+                    ${
+                      profile.profile_picture
+                        ? `<img src="${profile.profile_picture}" class="w-16 h-16 rounded-full xy-border" alt="${displayName}">`
+                        : ""
+                    }
+                    <div>
+                        <h1 class="text-3xl font-bold">${displayName}</h1>
+                        <p class="text-gray-300">${bio}</p>
+                        ${
+                          profile.x_username
+                            ? `<a href="https://x.com/${profile.x_username}" target="_blank" class="text-blue-400 hover:underline">@${profile.x_username}</a>`
+                            : ""
+                        }
+                    </div>
+                </div>
+                ${
+                  hasContext
+                    ? `<div class="mb-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-600/20 text-green-400">
+                            ✓ AI Clone Available
+                        </span>
+                    </div>`
+                    : `<div class="mb-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-red-600/20 text-red-400">
+                            ⚠ No AI Context Available
+                        </span>
+                    </div>`
+                }
+            </div>
+
+            ${
+              hasContext
+                ? `<!-- Chat Interface -->
+                <div class="xy-border rounded-xl p-6 bg-white/5">
+                    <h2 class="text-xl font-bold mb-4">Chat with ${displayName}'s AI Clone</h2>
+                    <div class="mb-4">
+                        <a href="https://lmpify.com/?q=${encodeURIComponent(
+                          profile.context,
+                        )}" 
+                           target="_blank"
+                           class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-all inline-flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path>
+                            </svg>
+                            Start Chatting
+                        </a>
+                    </div>
+                    <p class="text-sm text-gray-400">
+                        This will open a chat interface where you can talk to an AI version of ${displayName} 
+                        based on their social media content and context.
+                    </p>
+                </div>`
+                : `<!-- No Context Available -->
+                <div class="xy-border rounded-xl p-6 bg-white/5">
+                    <h2 class="text-xl font-bold mb-4">AI Clone Not Available</h2>
+                    <p class="text-gray-300 mb-4">
+                        ${displayName} hasn't set up their AI context yet, so their AI clone isn't available for chat.
+                    </p>
+                    <p class="text-sm text-gray-400">
+                        If you're ${displayName}, you can <a href="/login" class="text-blue-400 hover:underline">log in</a> 
+                        to set up your AI clone context.
+                    </p>
+                </div>`
+            }
+
+            <!-- Back to Home -->
+            <div class="mt-8 text-center">
+                <a href="/" class="text-blue-400 hover:underline">← Back to XYSelf</a>
+            </div>
+        </div>
+    </main>
+</body>
+</html>`;
 }
