@@ -86,6 +86,14 @@
                                     </svg>
                                     X Profile
                                 </a>
+                                <button id="chat-clone-btn"
+                                    class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-medium transition-all button-glow flex items-center gap-2 hidden">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                                    </svg>
+                                    Chat with Clone
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -95,8 +103,11 @@
 
                     <!-- Context -->
                     <div id="context-section" class="mt-4">
-                        <h4 class="font-medium text-gray-300 mb-2">Context Links:</h4>
-                        <div id="context-links" class="text-sm"></div>
+                        <h4 class="font-medium text-gray-300 mb-2">Context (Markdown):</h4>
+                        <div id="context-display"
+                            class="text-sm bg-black/30 p-4 rounded-lg xy-border max-h-64 overflow-y-auto">
+                            <pre class="whitespace-pre-wrap text-gray-300 font-mono text-xs"></pre>
+                        </div>
                     </div>
                 </div>
 
@@ -129,11 +140,12 @@
 
                         <div>
                             <label for="context" class="block text-sm font-medium text-gray-300 mb-2">
-                                Context Links
+                                Context (Markdown)
                             </label>
-                            <textarea id="context" name="context" rows="4" placeholder="One URL per line"
-                                class="w-full px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                            <p class="text-xs text-gray-400 mt-1">Custom context URLs, one per line</p>
+                            <textarea id="context" name="context" rows="8" placeholder="Markdown content for AI context"
+                                class="w-full px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"></textarea>
+                            <p class="text-xs text-gray-400 mt-1">Markdown content that will be used as context for the
+                                AI clone</p>
                         </div>
 
                         <div class="flex gap-4">
@@ -164,6 +176,11 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthStatus();
             setupEventListeners();
+
+            // Check if user just logged in and redirect to dashboard if they're on the root
+            if (window.location.pathname === '/' && getCurrentUserFromStatus()) {
+                window.location.href = '/dashboard';
+            }
         });
 
         // Setup event listeners
@@ -174,6 +191,24 @@
             });
             document.getElementById('update-form').addEventListener('submit', handleFormSubmit);
             document.getElementById('clear-form-btn').addEventListener('click', clearForm);
+            document.getElementById('chat-clone-btn').addEventListener('click', handleChatClone);
+        }
+
+        // Get current user from status (helper function)
+        function getCurrentUserFromStatus() {
+            return currentUser;
+        }
+
+        // Handle chat with clone
+        function handleChatClone() {
+            if (!currentProfile || !currentProfile.context) {
+                showMessage('No context available for this user', 'error');
+                return;
+            }
+
+            const encodedContext = encodeURIComponent(currentProfile.context);
+            const lmpifyUrl = `https://lmpify.com/?q=${encodedContext}`;
+            window.open(lmpifyUrl, '_blank');
         }
 
         // Check authentication status
@@ -264,6 +299,14 @@
                 xLink.classList.add('hidden');
             }
 
+            // Chat with Clone button
+            const chatBtn = document.getElementById('chat-clone-btn');
+            if (data.context && data.context.trim()) {
+                chatBtn.classList.remove('hidden');
+            } else {
+                chatBtn.classList.add('hidden');
+            }
+
             // Data sources
             const sources = data._metadata?.sources || {};
             const dataSourcesEl = document.getElementById('data-sources');
@@ -273,15 +316,13 @@
             if (sources.authorized_override) sourceTexts.push('🔐 Authorized override');
             dataSourcesEl.textContent = `Data sources: ${sourceTexts.join(', ')}`;
 
-            // Context links
-            const contextEl = document.getElementById('context-links');
-            if (data.context) {
-                const links = data.context.split('\n').filter(link => link.trim());
-                contextEl.innerHTML = links.map(link =>
-                    `<a href="${link.trim()}" target="_blank" class="text-blue-400 hover:underline block">${link.trim()}</a>`
-                ).join('');
+            // Context display
+            const contextDisplayEl = document.getElementById('context-display').querySelector('pre');
+            if (data.context && data.context.trim()) {
+                contextDisplayEl.textContent = data.context;
             } else {
-                contextEl.innerHTML = '<span class="text-gray-400">No context links</span>';
+                contextDisplayEl.textContent = 'No context available';
+                contextDisplayEl.className = 'whitespace-pre-wrap text-gray-500 font-mono text-xs italic';
             }
         }
 
