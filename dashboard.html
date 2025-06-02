@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-black">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub to X Username Lookup</title>
+    <meta name="description" content="Look up and manage GitHub to X username mappings with bio and context data." />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+
+        body {
+            font-family: "Inter", sans-serif;
+        }
+
+        .xy-gradient {
+            background: linear-gradient(135deg, #000000 0%, #121212 100%);
+        }
+
+        .xy-border {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .button-glow:hover {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+
+<body class="text-white">
+    <main class="min-h-screen xy-gradient">
+        <div class="max-w-4xl mx-auto px-4 py-8">
+            <!-- Header -->
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-6xl font-bold mb-4">GitHub ↔ X Lookup</h1>
+                <p class="text-xl text-gray-300">Manage GitHub to X username mappings</p>
+
+                <!-- Auth Status -->
+                <div id="auth-status" class="mt-6 p-4 xy-border rounded-lg bg-white/5">
+                    <span class="text-gray-400">Loading auth status...</span>
+                </div>
+            </div>
+
+            <!-- Search Section -->
+            <div class="xy-border rounded-xl p-8 bg-white/5 mb-8">
+                <h2 class="text-2xl font-bold mb-6">Look Up User</h2>
+                <div class="flex gap-4 mb-4">
+                    <input type="text" id="username-input" placeholder="Enter GitHub username"
+                        class="flex-1 px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button id="lookup-btn"
+                        class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-all button-glow">
+                        Lookup
+                    </button>
+                </div>
+                <p class="text-sm text-gray-400">
+                    Enter any GitHub username to see their profile data and X username mapping
+                </p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results-section" class="hidden">
+                <!-- User Profile Display -->
+                <div id="profile-display" class="xy-border rounded-xl p-8 bg-white/5 mb-8">
+                    <div class="flex items-start gap-6 mb-6">
+                        <img id="profile-picture" class="w-20 h-20 rounded-full xy-border" src="" alt="Profile">
+                        <div class="flex-1">
+                            <h3 id="profile-username" class="text-2xl font-bold"></h3>
+                            <p id="profile-bio" class="text-gray-300 mt-2"></p>
+                            <div class="flex gap-4 mt-4">
+                                <a id="github-link" href="" target="_blank"
+                                    class="text-blue-400 hover:underline flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path fill-rule="evenodd"
+                                            d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                    GitHub Profile
+                                </a>
+                                <a id="x-link" href="" target="_blank"
+                                    class="text-blue-400 hover:underline flex items-center gap-2 hidden">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                                    </svg>
+                                    X Profile
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Sources -->
+                    <div id="data-sources" class="text-sm text-gray-400 mb-4"></div>
+
+                    <!-- Context -->
+                    <div id="context-section" class="mt-4">
+                        <h4 class="font-medium text-gray-300 mb-2">Context Links:</h4>
+                        <div id="context-links" class="text-sm"></div>
+                    </div>
+                </div>
+
+                <!-- Edit Form -->
+                <div id="edit-form" class="xy-border rounded-xl p-8 bg-white/5">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-2xl font-bold">Update Profile Data</h3>
+                        <div id="form-type-indicator" class="px-3 py-1 rounded-full text-sm font-medium"></div>
+                    </div>
+
+                    <form id="update-form" class="space-y-6">
+                        <div>
+                            <label for="x-username" class="block text-sm font-medium text-gray-300 mb-2">
+                                X Username
+                            </label>
+                            <input type="text" id="x-username" name="x_username"
+                                placeholder="Enter X username (without @)"
+                                class="w-full px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-400 mt-1">Leave empty to clear</p>
+                        </div>
+
+                        <div>
+                            <label for="bio" class="block text-sm font-medium text-gray-300 mb-2">
+                                Bio Override
+                            </label>
+                            <textarea id="bio" name="bio" rows="3" placeholder="Custom bio text"
+                                class="w-full px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                            <p class="text-xs text-gray-400 mt-1">Leave empty to use GitHub bio</p>
+                        </div>
+
+                        <div>
+                            <label for="context" class="block text-sm font-medium text-gray-300 mb-2">
+                                Context Links
+                            </label>
+                            <textarea id="context" name="context" rows="4" placeholder="One URL per line"
+                                class="w-full px-4 py-3 bg-black/50 xy-border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                            <p class="text-xs text-gray-400 mt-1">Custom context URLs, one per line</p>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <button type="submit"
+                                class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-medium transition-all button-glow">
+                                Update Data
+                            </button>
+                            <button type="button" id="clear-form-btn"
+                                class="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-medium transition-all">
+                                Clear Form
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Loading/Error Messages -->
+            <div id="message-area" class="fixed bottom-4 right-4 max-w-md"></div>
+        </div>
+    </main>
+
+    <script>
+        let currentUser = null;
+        let currentProfile = null;
+        let currentUsername = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuthStatus();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('lookup-btn').addEventListener('click', handleLookup);
+            document.getElementById('username-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLookup();
+            });
+            document.getElementById('update-form').addEventListener('submit', handleFormSubmit);
+            document.getElementById('clear-form-btn').addEventListener('click', clearForm);
+        }
+
+        // Check authentication status
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/');
+                const data = await response.json();
+                currentUser = data.authenticated_user;
+
+                const authStatus = document.getElementById('auth-status');
+                if (currentUser) {
+                    authStatus.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <img src="${currentUser.avatar}" class="w-8 h-8 rounded-full">
+                                <span class="text-green-400">Logged in as ${currentUser.username}</span>
+                            </div>
+                            <a href="/logout" class="text-red-400 hover:underline">Logout</a>
+                        </div>
+                    `;
+                } else {
+                    authStatus.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Not logged in</span>
+                            <a href="/login" class="text-blue-400 hover:underline">Login with GitHub</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                showMessage('Failed to check auth status', 'error');
+            }
+        }
+
+        // Handle user lookup
+        async function handleLookup() {
+            const username = document.getElementById('username-input').value.trim();
+            if (!username) {
+                showMessage('Please enter a username', 'error');
+                return;
+            }
+
+            currentUsername = username;
+            showMessage('Looking up user...', 'info');
+
+            try {
+                const response = await fetch(`/${username}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to fetch user data');
+                }
+
+                currentProfile = data;
+                displayProfile(data);
+                setupForm(data);
+                document.getElementById('results-section').classList.remove('hidden');
+                showMessage('User data loaded', 'success');
+            } catch (error) {
+                showMessage(error.message, 'error');
+                document.getElementById('results-section').classList.add('hidden');
+            }
+        }
+
+        // Display user profile
+        function displayProfile(data) {
+            // Profile picture
+            const profilePic = document.getElementById('profile-picture');
+            profilePic.src = data.profile_picture || '/api/placeholder/80/80';
+            profilePic.style.display = data.profile_picture ? 'block' : 'none';
+
+            // Username
+            document.getElementById('profile-username').textContent = data.github_username;
+
+            // Bio
+            const bioEl = document.getElementById('profile-bio');
+            bioEl.textContent = data.bio || 'No bio available';
+
+            // GitHub link
+            const githubLink = document.getElementById('github-link');
+            githubLink.href = `https://github.com/${data.github_username}`;
+
+            // X link
+            const xLink = document.getElementById('x-link');
+            if (data.x_username) {
+                xLink.href = `https://x.com/${data.x_username}`;
+                xLink.classList.remove('hidden');
+            } else {
+                xLink.classList.add('hidden');
+            }
+
+            // Data sources
+            const sources = data._metadata?.sources || {};
+            const dataSourcesEl = document.getElementById('data-sources');
+            const sourceTexts = [];
+            if (sources.github) sourceTexts.push('📊 GitHub data');
+            if (sources.public_override) sourceTexts.push('🌐 Public override');
+            if (sources.authorized_override) sourceTexts.push('🔐 Authorized override');
+            dataSourcesEl.textContent = `Data sources: ${sourceTexts.join(', ')}`;
+
+            // Context links
+            const contextEl = document.getElementById('context-links');
+            if (data.context) {
+                const links = data.context.split('\n').filter(link => link.trim());
+                contextEl.innerHTML = links.map(link =>
+                    `<a href="${link.trim()}" target="_blank" class="text-blue-400 hover:underline block">${link.trim()}</a>`
+                ).join('');
+            } else {
+                contextEl.innerHTML = '<span class="text-gray-400">No context links</span>';
+            }
+        }
+
+        // Setup form based on current user and profile
+        function setupForm(data) {
+            const isOwnProfile = currentUser && currentUser.username === data.github_username;
+            const formTypeIndicator = document.getElementById('form-type-indicator');
+
+            if (isOwnProfile) {
+                formTypeIndicator.textContent = 'Authorized Update';
+                formTypeIndicator.className = 'px-3 py-1 rounded-full text-sm font-medium bg-green-600/20 text-green-400';
+            } else {
+                formTypeIndicator.textContent = 'Public Update';
+                formTypeIndicator.className = 'px-3 py-1 rounded-full text-sm font-medium bg-blue-600/20 text-blue-400';
+            }
+
+            // Populate form with current data
+            document.getElementById('x-username').value = data.x_username || '';
+            document.getElementById('bio').value = data.bio || '';
+            document.getElementById('context').value = data.context || '';
+        }
+
+        // Handle form submission
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+
+            if (!currentUsername) {
+                showMessage('No user selected', 'error');
+                return;
+            }
+
+            const formData = new FormData(e.target);
+            const data = {
+                x_username: formData.get('x_username') || null,
+                bio: formData.get('bio') || null,
+                context: formData.get('context') || null
+            };
+
+            showMessage('Updating data...', 'info');
+
+            try {
+                const response = await fetch(`/${currentUsername}/set`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to update data');
+                }
+
+                showMessage(`${result.key_type} data updated successfully!`, 'success');
+
+                // Refresh the profile data
+                await handleLookup();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+        // Clear form
+        function clearForm() {
+            document.getElementById('update-form').reset();
+        }
+
+        // Show message
+        function showMessage(text, type = 'info') {
+            const messageArea = document.getElementById('message-area');
+            const message = document.createElement('div');
+
+            const colors = {
+                info: 'bg-blue-600',
+                success: 'bg-green-600',
+                error: 'bg-red-600'
+            };
+
+            message.className = `${colors[type]} text-white px-4 py-3 rounded-lg mb-2 opacity-0 transition-opacity duration-300`;
+            message.textContent = text;
+
+            messageArea.appendChild(message);
+
+            // Fade in
+            setTimeout(() => message.classList.add('opacity-100'), 100);
+
+            // Remove after 5 seconds
+            setTimeout(() => {
+                message.classList.remove('opacity-100');
+                setTimeout(() => message.remove(), 300);
+            }, 5000);
+        }
+    </script>
+</body>
+
+</html>
