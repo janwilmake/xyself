@@ -294,7 +294,7 @@
             document.getElementById('chat-clone-btn').addEventListener('click', () => {
                 if (currentUser && currentProfile && currentProfile.context) {
                     const encodedContext = encodeURIComponent(currentProfile.context);
-                    window.open(`https://lmpify.com/?q=${encodedContext}`, '_blank');
+                    window.open(`https://letmeprompt.com/?q=${encodedContext}`, '_blank');
                 }
             });
             document.getElementById('view-user-clone-btn').addEventListener('click', () => {
@@ -379,7 +379,7 @@
             }
 
             const encodedContext = encodeURIComponent(currentProfile.context);
-            window.open(`https://lmpify.com/?q=${encodedContext}`, '_blank');
+            window.open(`https://letmeprompt.com/?q=${encodedContext}`, '_blank');
         }
 
         // Check authentication status

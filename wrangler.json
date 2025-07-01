@@ -1,8 +1,8 @@
 {
   "name": "xyself",
   "compatibility_date": "2025-01-27",
-  "assets": { "directory": "./" },
   "main": "main.ts",
+  "assets": { "directory": "./" },
   "kv_namespaces": [
     {
       "binding": "USER_DATA",

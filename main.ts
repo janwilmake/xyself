@@ -551,7 +551,7 @@ function generateChatInterface(profile: any): string {
                 <div class="xy-border rounded-xl p-6 bg-white/5">
                     <h2 class="text-xl font-bold mb-4">Chat with ${displayName}'s AI Clone</h2>
                     <div class="mb-4">
-                        <a href="https://lmpify.com/?q=${encodeURIComponent(
+                        <a href="https://letmeprompt.com/?q=${encodeURIComponent(
                           profile.context,
                         )}" 
                            target="_blank"
